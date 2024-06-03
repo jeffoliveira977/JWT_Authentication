@@ -14,11 +14,10 @@ function App() {
 
   const refreshToken = async () => {
     try {
-      const res = await axios.post('http://localhost:8000/api/refresh', { token: user.refreshToken })
+      const res = await axios.post('http://localhost:8000/api/refresh', {})
       setUser({
         ...user,
-        accessToken: res.data.accessToken,
-        refreshToken: res.data.refreshToken
+        accessToken: res.data.accessToken
       })
       return res.data
     } catch (err) {
