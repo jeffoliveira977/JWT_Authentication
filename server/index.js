@@ -2,8 +2,10 @@ const express = require('express')
 require('colors')
 const cors = require('cors')
 const jwt = require('jsonwebtoken')
+var cookieParser = require('cookie-parser');
 
 const app = express()
+app.use(cookieParser());
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 app.use(cors())
@@ -30,7 +32,7 @@ const generateAccessToken = (user) => {
         jwt.sign(
             { id: user.id, isAdmin: user.isAdmin },
             'secretKey',
-            { expiresIn: '5s' }
+            { expiresIn: '1m' }
         )
     )
 }
@@ -39,16 +41,19 @@ const generateRefreshToken = (user) => {
     return (
         jwt.sign(
             { id: user.id, isAdmin: user.isAdmin },
-            'refreshSecretKey'
+            'refreshSecretKey',
+            { expiresIn: '1d' }
         )
     )
 }
 
 app.post('/api/refresh', (req, res) => {
-    const refreshToken = req.body.token
+    const refreshToken = req.cookies['refreshToken'];
+   
     if (!refreshToken) {
         return res.status(401).json('You are not authenticated!')
     }
+    
     if (!refreshTokens.includes(refreshToken)) {
         return res.status(403).json('Refreshtoken is invalid!')
     }
@@ -59,9 +64,14 @@ app.post('/api/refresh', (req, res) => {
         const newRefreshToken = generateRefreshToken(user)
         refreshTokens.push(newRefreshToken)
 
+        res.cookie('refreshToken', newRefreshToken, {
+            httpOnly: true,
+            sameSite: 'strict',
+            maxAge: 24 * 60 * 60 * 1000, // 1 day in milliseconds
+        });
+  
         res.status(200).json({
-            accessToken: newAccessToken,
-            refreshToken: newRefreshToken
+            accessToken: newAccessToken
         })
     })
 })
@@ -75,11 +85,17 @@ app.post('/api/login', (req, res) => {
         const accessToken = generateAccessToken(user)
         const refreshToken = generateRefreshToken(user)
         refreshTokens.push(refreshToken)
+        
+        res.cookie('refreshToken', refreshToken, {
+            httpOnly: true,
+            sameSite: 'strict',
+            maxAge: 24 * 60 * 60 * 1000, // 1 day in milliseconds
+        });
+        
         res.json({
             username: user.username,
             isAdmin: user.isAdmin,
-            accessToken,
-            refreshToken
+            accessToken
         })
     }
     else {
@@ -115,8 +131,17 @@ app.delete('/api/users/:userId', verify, (req, res) => {
 })
 
 app.post('/api/logout', verify, (req, res) => {
-    const refreshToken = req.body.token
+   const refreshToken = req.cookies['refreshToken'];
+   
+    if (!refreshToken) {
+        return res.status(401).json('You are not authenticated!')
+    }
+    
     refreshTokens = refreshTokens.filter((token) => token !== refreshToken)
+
+    // Clear refresh token.
+    res.cookie('refreshToken', '', { httpOnly: true,  sameSite: 'strict',  maxAge: 0 });
+    
     res.status(200).json('User logged out successfully!')
 })
 
